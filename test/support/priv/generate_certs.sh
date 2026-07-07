@@ -12,10 +12,13 @@ openssl genrsa -out websockex.key 4096
 openssl req -new -key websockex.key -out websockex.csr \
   -subj "/C=US/ST=Test/L=Test/O=WebSockex/OU=Test/CN=localhost"
 
-# Generate server certificate signed by our CA
+# Generate server certificate signed by our CA.
+# A subjectAltName is required: modern OTP/:ssl rejects CN-only certs with
+# {bad_cert, {hostname_check_failed, missing_subject_altnames}}.
 openssl x509 -req -days 3650 -in websockex.csr \
   -CA websockexca.cer -CAkey websockexca.key \
-  -CAcreateserial -out websockex.cer
+  -CAcreateserial -out websockex.cer \
+  -extfile <(printf "subjectAltName=DNS:localhost,IP:127.0.0.1")
 
 # Clean up temporary files
 rm websockex.csr websockexca.key websockexca.srl

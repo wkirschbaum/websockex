@@ -135,6 +135,26 @@ defmodule WebSockex.ConnTest do
              {:error, %WebSockex.RequestError{code: 400, message: "Bad Request"}}
   end
 
+  test "handle_response returns a ConnError on a malformed header line" do
+    {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false, packet: 0, reuseaddr: true])
+    {:ok, port} = :inet.port(listen)
+
+    spawn_link(fn ->
+      {:ok, socket} = :gen_tcp.accept(listen)
+      {:ok, _request} = :gen_tcp.recv(socket, 0)
+      # A 101 upgrade whose header block contains an unparseable line.
+      :gen_tcp.send(socket, "HTTP/1.1 101 Switching Protocols\r\nNot A Valid Header\r\n\r\n")
+      Process.sleep(:infinity)
+    end)
+
+    conn = WebSockex.Conn.new("ws://localhost:#{port}/ws")
+    {:ok, conn} = WebSockex.Conn.open_socket(conn)
+    {:ok, request} = WebSockex.Conn.build_request(conn, "pants")
+    :ok = WebSockex.Conn.socket_send(conn, request)
+
+    assert {:error, %WebSockex.ConnError{}} = WebSockex.Conn.handle_response(conn, self())
+  end
+
   describe "secure connection" do
     setup do
       {:ok, {server_ref, url}} = WebSockex.TestServer.start_https(self())

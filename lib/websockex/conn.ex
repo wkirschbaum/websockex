@@ -349,6 +349,15 @@ defmodule WebSockex.Conn do
 
       {:ok, :http_eoh, body} ->
         {:ok, headers, body}
+
+      {:ok, {:http_error, line}, _rest} ->
+        {:error, %WebSockex.ConnError{original: {:http_error, line}}}
+
+      {:more, _length} ->
+        {:error, %WebSockex.ConnError{original: :incomplete_headers}}
+
+      {:error, reason} ->
+        {:error, %WebSockex.ConnError{original: reason}}
     end
   end
 

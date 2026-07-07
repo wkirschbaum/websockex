@@ -1,19 +1,73 @@
-name: "CI"
-on: ["push", "pull_request"]
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint_and_test:
-    name: "Lint and test"
-    runs-on: "ubuntu-latest"
+  test:
+    name: Test (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: "1.16"
+            otp: "24"
+            os: "ubuntu-22.04"
+          - elixir: "1.17"
+            otp: "25"
+            os: "ubuntu-22.04"
+          - elixir: "1.18"
+            otp: "26"
+            os: "ubuntu-24.04"
+          - elixir: "1.19"
+            otp: "27"
+            os: "ubuntu-24.04"
+          - elixir: "1.20"
+            otp: "28"
+            os: "ubuntu-24.04"
+            lint: true
     steps:
-    - uses: erlef/setup-beam@v1
-      with:
-        otp-version: latest
-        elixir-version: latest
+      - uses: actions/checkout@v4
 
-    - uses: actions/checkout@v1
-    - run: |
-        mix local.hex --force
-        mix deps.get
-        mix lint
-        mix test
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.exs') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile (warnings as errors)
+        run: mix compile --warnings-as-errors
+
+      - name: Check formatting
+        if: matrix.lint
+        run: mix format --check-formatted
+
+      - name: Credo
+        if: matrix.lint
+        run: mix credo --only warning
+
+      - name: Run tests
+        run: mix test

@@ -121,7 +121,7 @@ defmodule WebSockex.Utils do
   end
 
   defp print_event(io_dev, :closed, %{name: name}) do
-    IO.puts(io_dev, "*DBG* #{inspect(name)} closed the connection sucessfully")
+    IO.puts(io_dev, "*DBG* #{inspect(name)} closed the connection successfully")
   end
 
   defp print_event(io_dev, :timeout_closed, %{name: name}) do
@@ -152,11 +152,11 @@ defmodule WebSockex.Utils do
   end
 
   defp print_event(io_dev, :connected, %{name: name}) do
-    IO.puts(io_dev, "*DBG* #{inspect(name)} sucessfully connected")
+    IO.puts(io_dev, "*DBG* #{inspect(name)} successfully connected")
   end
 
   defp print_event(io_dev, :reconnected, %{name: name}) do
-    IO.puts(io_dev, "*DBG* #{inspect(name)} sucessfully reconnected")
+    IO.puts(io_dev, "*DBG* #{inspect(name)} successfully reconnected")
   end
 
   def parse_debug_options(name, options) do

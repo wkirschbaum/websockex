@@ -380,7 +380,8 @@ defmodule WebSockex.Frame do
         {<<127::7, 0::1, size::63>>, 64 + 7}
 
       _ ->
-        raise "WTF, Seriously? You're trying to send a payload larger than #{0x7FFFFFFFFFFFFFFF} bytes?"
+        raise ArgumentError,
+              "payload is too large to send: WebSocket frames cannot exceed #{0x7FFFFFFFFFFFFFFF} bytes"
     end
   end
 

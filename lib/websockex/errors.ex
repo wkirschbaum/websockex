@@ -62,19 +62,19 @@ defmodule WebSockex.FrameError do
   defexception [:reason, :opcode, :buffer]
 
   def message(%__MODULE__{reason: :nonfin_control_frame} = exception) do
-    "Fragmented Control Frame: Control Frames Can't Be Fragmented\nbuffer: #{exception.buffer}"
+    "Fragmented Control Frame: Control Frames Can't Be Fragmented\nbuffer: #{inspect(exception.buffer)}"
   end
 
   def message(%__MODULE__{reason: :control_frame_too_large} = exception) do
-    "Control Frame Too Large: Control Frames Can't Be Larger Than 125 Bytes\nbuffer: #{exception.buffer}"
+    "Control Frame Too Large: Control Frames Can't Be Larger Than 125 Bytes\nbuffer: #{inspect(exception.buffer)}"
   end
 
   def message(%__MODULE__{reason: :invalid_utf8} = exception) do
-    "Invalid UTF-8: Text and Close frames must have UTF-8 payloads.\nbuffer: #{exception.buffer}"
+    "Invalid UTF-8: Text and Close frames must have UTF-8 payloads.\nbuffer: #{inspect(exception.buffer)}"
   end
 
   def message(%__MODULE__{reason: :invalid_close_code} = exception) do
-    "Invalid Close Code: Close Codes must be in range of 1000 through 4999\nbuffer: #{exception.buffer}"
+    "Invalid Close Code: Close Codes must be in range of 1000 through 4999\nbuffer: #{inspect(exception.buffer)}"
   end
 
   def message(%__MODULE__{} = exception) do

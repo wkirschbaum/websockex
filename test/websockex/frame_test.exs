@@ -44,6 +44,19 @@ defmodule WebSockex.FrameTest do
       assert Frame.parse_frame(<<part>>) == :incomplete
     end
 
+    test "rejects a frame that exceeds the max frame size" do
+      frame = <<1::1, 0::3, 1::4, 0::1, 5::7, "Hello"::utf8>>
+
+      assert {:error, %WebSockex.FrameError{reason: :frame_too_large, opcode: :text}} =
+               Frame.parse_frame(frame, 4)
+    end
+
+    test "allows a frame within the max frame size" do
+      frame = <<1::1, 0::3, 1::4, 0::1, 5::7, "Hello"::utf8>>
+
+      assert Frame.parse_frame(frame, 5) == {:ok, {:text, "Hello"}, <<>>}
+    end
+
     test "handles incomplete frames with complete headers" do
       frame = <<1::1, 0::3, 1::4, 0::1, 5::7, "Hello"::utf8>>
 

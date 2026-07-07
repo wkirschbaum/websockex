@@ -26,6 +26,36 @@ defmodule WebSockex.Frame do
           | {:finish, binary}
 
   @opcodes %{continuation: 0, text: 1, binary: 2, close: 8, ping: 9, pong: 10}
+  @opcode_names Map.new(@opcodes, fn {name, code} -> {code, name} end)
+
+  @typedoc "The maximum allowed payload size for a single frame."
+  @type max_frame_size :: non_neg_integer | :infinity
+
+  @doc """
+  Parses a bitstring and returns a frame.
+
+  When `max_frame_size` is anything other than `:infinity`, a frame whose
+  declared payload length exceeds it is rejected with a `:frame_too_large`
+  error before its payload is buffered.
+  """
+  @spec parse_frame(bitstring, max_frame_size) ::
+          :incomplete | {:ok, frame, buffer} | {:error, %WebSockex.FrameError{}}
+  def parse_frame(data, :infinity), do: parse_frame(data)
+
+  def parse_frame(data, max_frame_size) do
+    case declared_length(data) do
+      {:ok, len} when len > max_frame_size ->
+        {:error,
+         %WebSockex.FrameError{
+           reason: :frame_too_large,
+           opcode: frame_opcode(data),
+           buffer: data
+         }}
+
+      _ ->
+        parse_frame(data)
+    end
+  end
 
   @doc """
   Parses a bitstring and returns a frame.
@@ -363,6 +393,16 @@ defmodule WebSockex.Frame do
       {:error, %WebSockex.FrameError{reason: :invalid_utf8, opcode: :text, buffer: buffer}}
     end
   end
+
+  # Reads the declared payload length from a frame header without consuming the
+  # payload. Returns `:incomplete` when the header itself isn't fully buffered.
+  defp declared_length(<<_::9, 126::7, len::16, _::bitstring>>), do: {:ok, len}
+  defp declared_length(<<_::9, 127::7, len::64, _::bitstring>>), do: {:ok, len}
+  defp declared_length(<<_::9, len::7, _::bitstring>>), do: {:ok, len}
+  defp declared_length(_), do: :incomplete
+
+  defp frame_opcode(<<_::4, opcode::4, _::bitstring>>), do: Map.get(@opcode_names, opcode)
+  defp frame_opcode(_), do: nil
 
   defp create_mask_key do
     :crypto.strong_rand_bytes(4)

@@ -1,6 +1,7 @@
 defmodule WebSockex do
   alias WebSockex.Utils
   @handshake_guid "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+  @close_timeout 5000
 
   @moduledoc ~S"""
   A client handles negotiating the connection, then sending frames, receiving
@@ -135,6 +136,11 @@ defmodule WebSockex do
   - `:debug` - Options to set the debug options for `:sys.handle_debug`.
   - `:name` - An atom that the registers the process with name locally.
     Can also be a `{:via, module, term}` or `{:global, term}` tuple.
+  - `:max_frame_size` - The maximum size, in bytes, of a received frame (and of
+    a reassembled fragmented message). A larger frame is refused with a `1009`
+    close instead of being buffered. _Defaults to `:infinity`_.
+  - `:close_timeout` - How long, in ms, to wait for the server to acknowledge a
+    close before forcibly closing the socket. _Defaults to #{@close_timeout} ms_.
 
   Other possible option values include: `t:WebSockex.Conn.connection_option/0`
   """
@@ -144,6 +150,8 @@ defmodule WebSockex do
           | {:debug, debug_opts}
           | {:name, atom | {:global, term} | {:via, module, term}}
           | {:handle_initial_conn_failure, boolean}
+          | {:max_frame_size, WebSockex.Frame.max_frame_size()}
+          | {:close_timeout, non_neg_integer}
 
   @typedoc """
   The reason a connection was closed.
@@ -602,7 +610,9 @@ defmodule WebSockex do
       name: name,
       reply_fun: reply_fun,
       buffer: <<>>,
-      fragment: nil
+      fragment: nil,
+      max_frame_size: Keyword.get(opts, :max_frame_size, :infinity),
+      close_timeout: Keyword.get(opts, :close_timeout, @close_timeout)
     }
 
     handle_conn_failure = Keyword.get(opts, :handle_initial_conn_failure, false)
@@ -661,13 +671,16 @@ defmodule WebSockex do
   end
 
   defp websocket_loop(parent, debug, state) do
-    case WebSockex.Frame.parse_frame(state.buffer) do
+    case WebSockex.Frame.parse_frame(state.buffer, state.max_frame_size) do
       {:ok, frame, buffer} ->
         debug = Utils.sys_debug(debug, {:in, :frame, frame}, state)
 
         execute_telemetry([:websockex, :frame, :received], state, %{frame: frame})
 
         handle_frame(frame, parent, debug, %{state | buffer: buffer})
+
+      {:error, %WebSockex.FrameError{} = error} ->
+        handle_close(frame_error_close(error), parent, debug, state)
 
       :incomplete ->
         transport = state.conn.transport
@@ -825,13 +838,32 @@ defmodule WebSockex do
   end
 
   defp handle_fragment({:continuation, next}, parent, debug, %{fragment: {type, part}} = state) do
-    websocket_loop(parent, debug, %{state | fragment: {type, <<part::binary, next::binary>>}})
+    payload = <<part::binary, next::binary>>
+
+    if within_frame_size?(payload, state.max_frame_size) do
+      websocket_loop(parent, debug, %{state | fragment: {type, payload}})
+    else
+      handle_close(oversize_fragment_close(), parent, debug, state)
+    end
   end
 
   defp handle_fragment({:finish, next}, parent, debug, %{fragment: {type, part}} = state) do
-    frame = {type, <<part::binary, next::binary>>}
-    debug = Utils.sys_debug(debug, {:in, :completed_fragment, frame}, state)
-    handle_frame(frame, parent, debug, %{state | fragment: nil})
+    payload = <<part::binary, next::binary>>
+
+    if within_frame_size?(payload, state.max_frame_size) do
+      frame = {type, payload}
+      debug = Utils.sys_debug(debug, {:in, :completed_fragment, frame}, state)
+      handle_frame(frame, parent, debug, %{state | fragment: nil})
+    else
+      handle_close(oversize_fragment_close(), parent, debug, state)
+    end
+  end
+
+  defp within_frame_size?(_payload, :infinity), do: true
+  defp within_frame_size?(payload, max), do: byte_size(payload) <= max
+
+  defp oversize_fragment_close do
+    {:local, 1009, "Received a fragmented message larger than the maximum frame size"}
   end
 
   defp handle_close({:remote, :closed} = reason, parent, debug, state) do
@@ -916,7 +948,7 @@ defmodule WebSockex do
         _ -> debug
       end
 
-    timer_ref = Process.send_after(self(), :"$websockex_close_timeout", 5000)
+    timer_ref = Process.send_after(self(), :"$websockex_close_timeout", state.close_timeout)
     close_loop(reason, parent, debug, Map.put(state, :timer_ref, timer_ref))
   end
 
@@ -926,7 +958,7 @@ defmodule WebSockex do
     case send_close_frame(reason, state.conn) do
       :ok ->
         debug = Utils.sys_debug(debug, {:socket_out, :close, reason}, state)
-        timer_ref = Process.send_after(self(), :"$websockex_close_timeout", 5000)
+        timer_ref = Process.send_after(self(), :"$websockex_close_timeout", state.close_timeout)
         close_loop(reason, parent, debug, Map.put(state, :timer_ref, timer_ref))
 
       {:error, %WebSockex.ConnError{original: reason}} when reason in [:closed, :einval] ->
@@ -937,7 +969,7 @@ defmodule WebSockex do
   defp handle_error_close(reason, parent, debug, state) do
     send_close_frame(:error, state.conn)
 
-    timer_ref = Process.send_after(self(), :"$websockex_close_timeout", 5000)
+    timer_ref = Process.send_after(self(), :"$websockex_close_timeout", state.close_timeout)
     close_loop(reason, parent, debug, Map.put(state, :timer_ref, timer_ref))
   end
 
@@ -998,6 +1030,15 @@ defmodule WebSockex do
 
   defp build_close_frame(:error) do
     WebSockex.Frame.encode_frame({:close, 1011, ""})
+  end
+
+  # Maps a frame parse error to the close reason to send back to the server.
+  defp frame_error_close(%WebSockex.FrameError{reason: :frame_too_large}) do
+    {:local, 1009, "Received a frame larger than the maximum frame size"}
+  end
+
+  defp frame_error_close(%WebSockex.FrameError{}) do
+    {:local, 1002, "Received an invalid frame"}
   end
 
   # Connection Handling

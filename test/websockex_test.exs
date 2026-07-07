@@ -315,6 +315,26 @@ defmodule WebSockexTest do
     assert_receive {1002, "Endpoint sent a continuation frame without starting a fragment"}
   end
 
+  test "closes with 1002 when receiving an invalid frame", context do
+    Process.unlink(context.pid)
+    WebSockex.cast(context.pid, {:send_conn, self()})
+    assert_receive conn = %WebSockex.Conn{}
+
+    # A non-fin control (ping) frame is invalid per RFC 6455 §5.5.
+    send(context.pid, {conn.transport, conn.socket, <<0::1, 0::3, 9::4, 0::1, 0::7>>})
+
+    assert_receive {1002, "Received an invalid frame"}
+  end
+
+  test "closes with 1009 when a received frame exceeds max_frame_size", context do
+    {:ok, _pid} = TestClient.start(context.url, %{}, max_frame_size: 8)
+    server_pid = TestServer.receive_socket_pid()
+
+    send(server_pid, {:send, {:text, "way more than eight bytes"}})
+
+    assert_receive {1009, "Received a frame larger than the maximum frame size"}
+  end
+
   test "can receive text fragments", context do
     WebSockex.cast(context.pid, {:send_conn, self()})
     TestClient.catch_attr(context.pid, :text, self())

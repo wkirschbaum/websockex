@@ -77,6 +77,10 @@ defmodule WebSockex.FrameError do
     "Invalid Close Code: Close Codes must be in range of 1000 through 4999\nbuffer: #{inspect(exception.buffer)}"
   end
 
+  def message(%__MODULE__{reason: :frame_too_large} = exception) do
+    "Frame Too Large: The frame exceeds the configured maximum frame size.\nbuffer: #{inspect(exception.buffer)}"
+  end
+
   def message(%__MODULE__{} = exception) do
     "Frame Error: #{inspect(exception)}"
   end

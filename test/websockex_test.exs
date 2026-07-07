@@ -335,6 +335,37 @@ defmodule WebSockexTest do
     assert_receive {1009, "Received a frame larger than the maximum frame size"}
   end
 
+  test "closes with 1002 when receiving a masked frame", context do
+    Process.unlink(context.pid)
+    WebSockex.cast(context.pid, {:send_conn, self()})
+    assert_receive conn = %WebSockex.Conn{}
+
+    # Servers must never mask frames (RFC 6455 §5.1).
+    send(context.pid, {conn.transport, conn.socket, <<1::1, 0::3, 1::4, 1::1, 0::7, 0::32>>})
+
+    assert_receive {1002, "Received an invalid frame"}
+  end
+
+  test "closes with 1002 when receiving an unknown opcode", context do
+    Process.unlink(context.pid)
+    WebSockex.cast(context.pid, {:send_conn, self()})
+    assert_receive conn = %WebSockex.Conn{}
+
+    send(context.pid, {conn.transport, conn.socket, <<1::1, 0::3, 3::4, 0::1, 0::7>>})
+
+    assert_receive {1002, "Received an invalid frame"}
+  end
+
+  test "closes with 1002 when receiving a reserved bit", context do
+    Process.unlink(context.pid)
+    WebSockex.cast(context.pid, {:send_conn, self()})
+    assert_receive conn = %WebSockex.Conn{}
+
+    send(context.pid, {conn.transport, conn.socket, <<1::1, 1::3, 1::4, 0::1, 0::7>>})
+
+    assert_receive {1002, "Received an invalid frame"}
+  end
+
   test "can receive text fragments", context do
     WebSockex.cast(context.pid, {:send_conn, self()})
     TestClient.catch_attr(context.pid, :text, self())

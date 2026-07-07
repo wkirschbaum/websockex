@@ -240,6 +240,13 @@ defmodule WebSockex.Frame do
     {:ok, {:finish, payload}, rest}
   end
 
+  # Any complete frame that matches no clause above is malformed: the mask bit
+  # is set (servers must not mask), a reserved RSV bit is set, or the opcode is
+  # unknown/reserved. Per RFC 6455 these are protocol errors, not crashes.
+  def parse_frame(buffer) do
+    {:error, %WebSockex.FrameError{reason: :invalid_frame, opcode: nil, buffer: buffer}}
+  end
+
   @doc """
   Parses and combines two frames in a fragmented segment.
   """

@@ -81,6 +81,10 @@ defmodule WebSockex.FrameError do
     "Frame Too Large: The frame exceeds the configured maximum frame size.\nbuffer: #{inspect(exception.buffer)}"
   end
 
+  def message(%__MODULE__{reason: :invalid_frame} = exception) do
+    "Invalid Frame: The frame has a set mask bit, a reserved bit, or an unknown opcode.\nbuffer: #{inspect(exception.buffer)}"
+  end
+
   def message(%__MODULE__{} = exception) do
     "Frame Error: #{inspect(exception)}"
   end

@@ -1,5 +1,5 @@
 defmodule WebSockex do
-  alias WebSockex.{Utils}
+  alias WebSockex.Utils
   @handshake_guid "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
   @moduledoc ~S"""
@@ -296,27 +296,25 @@ defmodule WebSockex do
     quote location: :keep do
       @behaviour WebSockex
 
-      if Kernel.function_exported?(Supervisor, :child_spec, 2) do
-        @doc false
-        def child_spec(conn_info, state) do
-          %{
-            id: __MODULE__,
-            start: {__MODULE__, :start_link, [conn_info, state]}
-          }
-          |> Supervisor.child_spec(unquote(Macro.escape(opts)))
-        end
-
-        @doc false
-        def child_spec(state) do
-          %{
-            id: __MODULE__,
-            start: {__MODULE__, :start_link, [state]}
-          }
-          |> Supervisor.child_spec(unquote(Macro.escape(opts)))
-        end
-
-        defoverridable child_spec: 2, child_spec: 1
+      @doc false
+      def child_spec(conn_info, state) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [conn_info, state]}
+        }
+        |> Supervisor.child_spec(unquote(Macro.escape(opts)))
       end
+
+      @doc false
+      def child_spec(state) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [state]}
+        }
+        |> Supervisor.child_spec(unquote(Macro.escape(opts)))
+      end
+
+      defoverridable child_spec: 2, child_spec: 1
 
       @doc false
       def handle_connect(_conn, state) do
@@ -1221,12 +1219,15 @@ defmodule WebSockex do
   defp validate_handshake(headers, key) do
     challenge = :crypto.hash(:sha, key <> @handshake_guid) |> Base.encode64()
 
-    {_, res} = List.keyfind(headers, "Sec-Websocket-Accept", 0)
+    case List.keyfind(headers, "Sec-Websocket-Accept", 0) do
+      {_, ^challenge} ->
+        :ok
 
-    if challenge == res do
-      :ok
-    else
-      {:error, %WebSockex.HandshakeError{response: res, challenge: challenge}}
+      {_, response} ->
+        {:error, %WebSockex.HandshakeError{response: response, challenge: challenge}}
+
+      nil ->
+        {:error, %WebSockex.HandshakeError{response: nil, challenge: challenge}}
     end
   end
 

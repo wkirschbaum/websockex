@@ -308,7 +308,8 @@ defmodule WebSockex.Conn do
   defp wait_for_response(conn, buffer \\ "", scan_from \\ 0) do
     scan_len = byte_size(buffer) - scan_from
 
-    if scan_len > 0 and :binary.match(buffer, "\r\n\r\n", scope: {scan_from, scan_len}) != :nomatch do
+    if scan_len > 0 and
+         :binary.match(buffer, "\r\n\r\n", scope: {scan_from, scan_len}) != :nomatch do
       {:ok, buffer}
     else
       with {:ok, data} <- conn.conn_mod.recv(conn.socket, 0, conn.socket_recv_timeout) do

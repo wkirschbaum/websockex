@@ -3,8 +3,6 @@ defmodule WebSockex.Conn do
   Handles establishing and controlling the TCP connection.
 
   Dispatches to the correct module for the underlying connection. (`:gen_tcp` or `:ssl`)
-
-  Is woefully inadequite for verifying proper peers in SSL connections.
   """
 
   @socket_connect_timeout_default 6000
@@ -37,8 +35,9 @@ defmodule WebSockex.Conn do
 
   - `:extra_headers` - defines other headers to be send in the opening request.
   - `:insecure` - Determines whether to verify the peer in a SSL connection.
-    SSL peer verification is currenctly broken and only works in certain cases
-    in which the `:cacerts` are also provided. Sorry. _Defaults to `true`_.
+    When set to `false` the peer is verified against the provided `:cacerts`,
+    or, if none are given, the operating system's CA trust store.
+    _Defaults to `true`_.
   - `:cacerts` - The CA certifications for use in an secure connection when the
     `:insecure` option is `false` (has no effect when `:insecure is true`).
     These certifications need a list of decoded binaries. See the
@@ -72,7 +71,11 @@ defmodule WebSockex.Conn do
           socket: socket | nil,
           socket_connect_timeout: non_neg_integer,
           socket_recv_timeout: non_neg_integer,
-          resp_headers: [header]
+          cacerts: [certification] | nil,
+          insecure: boolean,
+          resp_headers: [header],
+          ssl_options: [:ssl.tls_client_option()] | nil,
+          socket_options: [:gen_tcp.option()] | nil
         }
 
   @doc """
@@ -121,11 +124,8 @@ defmodule WebSockex.Conn do
         # just that the application didn't get them registered.
         {:error, %WebSockex.ApplicationError{reason: :not_started}}
 
-      # This is confusing to look at. But it's just a match with multiple guards
       %URI{host: host, port: port, scheme: protocol}
-      when is_nil(host)
-      when is_nil(port)
-      when protocol not in ["ws", "wss", "http", "https"] ->
+      when is_nil(host) or is_nil(port) or protocol not in ["ws", "wss", "http", "https"] ->
         {:error, %WebSockex.URLError{url: url}}
 
       %URI{path: nil} = uri ->
@@ -303,16 +303,14 @@ defmodule WebSockex.Conn do
   defp conn_module(_), do: nil
 
   defp wait_for_response(conn, buffer \\ "") do
-    case Regex.match?(~r/\r\n\r\n/, buffer) do
-      true ->
-        {:ok, buffer}
-
-      false ->
-        with {:ok, data} <- conn.conn_mod.recv(conn.socket, 0, conn.socket_recv_timeout) do
-          wait_for_response(conn, buffer <> data)
-        else
-          {:error, reason} -> {:error, %WebSockex.ConnError{original: reason}}
-        end
+    if String.contains?(buffer, "\r\n\r\n") do
+      {:ok, buffer}
+    else
+      with {:ok, data} <- conn.conn_mod.recv(conn.socket, 0, conn.socket_recv_timeout) do
+        wait_for_response(conn, buffer <> data)
+      else
+        {:error, reason} -> {:error, %WebSockex.ConnError{original: reason}}
+      end
     end
   end
 
@@ -321,7 +319,7 @@ defmodule WebSockex.Conn do
   end
 
   defp build_full_path(%__MODULE__{path: path, query: query}) do
-    struct(URI, %{path: path, query: query})
+    %URI{path: path, query: query}
     |> URI.to_string()
   end
 
@@ -366,7 +364,7 @@ defmodule WebSockex.Conn do
     minimal_socket_connection_options()
   end
 
-  # Crazy SSL Stuff (It will be normal SSL stuff when I figure out Erlang's ssl)
+  # SSL connection options
 
   defp ssl_connection_options(%{ssl_options: ssl_options}) when not is_nil(ssl_options) do
     [
@@ -387,12 +385,25 @@ defmodule WebSockex.Conn do
   end
 
   defp ssl_connection_options(%{cacerts: cacerts}) when cacerts != nil do
+    verified_options(cacerts)
+  end
+
+  # No explicit certs given, so verify against the OS trust store.
+  # `:public_key.cacerts_get/0` requires OTP 25+, guaranteed by our Elixir floor.
+  defp ssl_connection_options(%{insecure: false}) do
+    verified_options(:public_key.cacerts_get())
+  end
+
+  defp verified_options(cacerts) do
     [
       :binary,
       active: false,
       packet: 0,
       verify: :verify_peer,
-      cacerts: cacerts
+      cacerts: cacerts,
+      customize_hostname_check: [
+        match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+      ]
     ]
   end
 end

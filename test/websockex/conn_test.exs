@@ -160,6 +160,15 @@ defmodule WebSockex.ConnTest do
                WebSockex.Conn.open_socket(conn)
     end
 
+    test "open_socket with insecure: false verifies against the OS trust store", context do
+      # The test server uses a private CA that isn't in the OS trust store, so
+      # verification fails cleanly. Previously this combination (insecure: false
+      # with no cacerts) raised a FunctionClauseError instead.
+      conn = WebSockex.Conn.new(context.uri, insecure: false)
+
+      assert {:error, %WebSockex.ConnError{}} = WebSockex.Conn.open_socket(conn)
+    end
+
     test "open_socket with insecure flag", context do
       conn = WebSockex.Conn.new(context.uri, insecure: true)
 

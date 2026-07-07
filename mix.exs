@@ -46,7 +46,8 @@ defmodule WebSockex.Mixfile do
       {:cowboy, "~> 2.17", only: :test},
       {:plug_cowboy, "~> 2.9", only: :test},
       {:plug, "~> 1.20", only: :test},
-      {:credo, "~> 1.7", only: :dev, runtime: false}
+      {:credo, "~> 1.7", only: :dev, runtime: false},
+      {:stream_data, "~> 1.2", only: [:dev, :test]}
     ]
   end
 

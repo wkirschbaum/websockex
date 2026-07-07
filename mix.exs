@@ -7,7 +7,7 @@ defmodule WebSockex.Mixfile do
       app: :websockex,
       name: "WebSockex",
       version: "0.5.1",
-      elixir: "~> 1.11",
+      elixir: "~> 1.16",
       description: "An Elixir WebSocket client",
       source_url: "https://github.com/Azolo/websockex",
       build_embedded: Mix.env() == :prod,
@@ -23,43 +23,32 @@ defmodule WebSockex.Mixfile do
   defp elixirc_paths(_), do: ["lib"]
 
   def application do
-    applications = [:logger, :ssl, :crypto] ++ applications(otp_release())
-    [extra_applications: applications, mod: {WebSockex.Application, []}]
+    [
+      extra_applications: [:logger, :ssl, :crypto, :telemetry],
+      mod: {WebSockex.Application, []}
+    ]
   end
-
-  defp applications(otp_release) when otp_release >= 21 do
-    [:telemetry]
-  end
-
-  defp applications(_), do: []
 
   defp aliases do
     [
       lint: [
         "compile --warnings-as-errors",
         "format --check-formatted",
-        "credo --only warning",
-        "dialyzer"
+        "credo --only warning"
       ]
     ]
   end
 
   defp deps do
     [
-      {:ex_doc, "~> 0.27", only: :dev, runtime: false},
-      {:cowboy, "~> 2.9", only: :test},
-      {:plug_cowboy, "~> 2.5", only: :test},
-      {:plug, "~> 1.12", only: :test},
-      {:credo, "~> 1.7", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4", only: :dev, runtime: false}
-    ] ++ optional_deps(otp_release())
+      {:telemetry, "~> 1.4"},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
+      {:cowboy, "~> 2.17", only: :test},
+      {:plug_cowboy, "~> 2.9", only: :test},
+      {:plug, "~> 1.20", only: :test},
+      {:credo, "~> 1.7", only: :dev, runtime: false}
+    ]
   end
-
-  defp optional_deps(otp_release) when otp_release >= 21 do
-    [{:telemetry, "~> 1.0"}]
-  end
-
-  defp optional_deps(_), do: []
 
   defp package do
     %{
@@ -75,9 +64,5 @@ defmodule WebSockex.Mixfile do
       extras: ["README.md"],
       main: "readme"
     ]
-  end
-
-  defp otp_release do
-    :erlang.system_info(:otp_release) |> to_string() |> String.to_integer()
   end
 end

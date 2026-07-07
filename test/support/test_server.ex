@@ -1,5 +1,4 @@
 defmodule WebSockex.TestServer do
-  Module.register_attribute(__MODULE__, :dialyzer, persist: true)
   use Plug.Router
 
   @base_path Path.join([__DIR__, "priv"])

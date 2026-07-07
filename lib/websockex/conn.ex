@@ -302,12 +302,17 @@ defmodule WebSockex.Conn do
   defp conn_module("https"), do: :ssl
   defp conn_module(_), do: nil
 
-  defp wait_for_response(conn, buffer \\ "") do
-    if String.contains?(buffer, "\r\n\r\n") do
+  # Scans only the newly-appended data (plus a 3-byte overlap, so a terminator
+  # split across two packets is still found) rather than rescanning the whole
+  # buffer on every recv.
+  defp wait_for_response(conn, buffer \\ "", scan_from \\ 0) do
+    scan_len = byte_size(buffer) - scan_from
+
+    if scan_len > 0 and :binary.match(buffer, "\r\n\r\n", scope: {scan_from, scan_len}) != :nomatch do
       {:ok, buffer}
     else
       with {:ok, data} <- conn.conn_mod.recv(conn.socket, 0, conn.socket_recv_timeout) do
-        wait_for_response(conn, buffer <> data)
+        wait_for_response(conn, buffer <> data, max(byte_size(buffer) - 3, 0))
       else
         {:error, reason} -> {:error, %WebSockex.ConnError{original: reason}}
       end

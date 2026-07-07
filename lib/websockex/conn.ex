@@ -391,7 +391,17 @@ defmodule WebSockex.Conn do
   # No explicit certs given, so verify against the OS trust store.
   # `:public_key.cacerts_get/0` requires OTP 25+, guaranteed by our Elixir floor.
   defp ssl_connection_options(%{insecure: false}) do
-    verified_options(:public_key.cacerts_get())
+    verified_options(os_cacerts())
+  end
+
+  # Returns the OS trust store, or an empty list when none is available.
+  # `:public_key.cacerts_get/0` raises if no trust store can be loaded; falling
+  # back to `[]` lets the handshake fail with a clean cert error instead of
+  # crashing the connection process.
+  defp os_cacerts do
+    :public_key.cacerts_get()
+  rescue
+    _ -> []
   end
 
   defp verified_options(cacerts) do

@@ -1244,12 +1244,8 @@ defmodule WebSockex do
     end
   end
 
-  if WebSockex.Utils.otp_release() >= 21 do
-    defp execute_telemetry(event, state, extra_metadata \\ %{}) do
-      metadata = Map.merge(%{conn: state.conn, module: state.module}, extra_metadata)
-      :telemetry.execute(event, %{time: System.system_time()}, metadata)
-    end
-  else
-    defp execute_telemetry(_, _, _ \\ %{}), do: :ok
+  defp execute_telemetry(event, state, extra_metadata \\ %{}) do
+    metadata = Map.merge(%{conn: state.conn, module: state.module}, extra_metadata)
+    :telemetry.execute(event, %{time: System.system_time()}, metadata)
   end
 end

@@ -1,14 +1,6 @@
 defmodule WebSockex.Utils do
   @moduledoc false
 
-  Code.ensure_loaded(:sys)
-
-  # OTP
-
-  def otp_release do
-    :erlang.system_info(:otp_release) |> to_string() |> String.to_integer()
-  end
-
   # Startup
 
   def spawn(link, conn, module, state, opts) do
@@ -84,11 +76,7 @@ defmodule WebSockex.Utils do
     :sys.handle_debug(debug, &print_event/3, state, event)
   end
 
-  if function_exported?(:sys, :get_log, 1) do
-    def sys_log(debug), do: :sys.get_log(debug)
-  else
-    def sys_log(debug), do: :sys.get_debug(:log, debug, [])
-  end
+  def sys_log(debug), do: :sys.get_log(debug)
 
   defp print_event(io_dev, {:in, :frame, frame}, %{name: name}) do
     IO.puts(io_dev, "*DBG* #{inspect(name)} received frame: #{inspect(frame)}")

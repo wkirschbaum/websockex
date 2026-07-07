@@ -811,6 +811,19 @@ defmodule WebSockex do
     handle_fragment(fragment, parent, debug, state)
   end
 
+  # A non-control data frame received while a fragmented message is in progress
+  # is a protocol error (RFC 6455 §5.4); only continuation and control frames
+  # may appear until the fragment is finished.
+  defp handle_frame({type, _}, parent, debug, %{fragment: fragment} = state)
+       when type in [:text, :binary] and not is_nil(fragment) do
+    handle_close(
+      {:local, 1002, "Endpoint sent a data frame while a fragment was unfinished"},
+      parent,
+      debug,
+      state
+    )
+  end
+
   defp handle_frame(frame, parent, debug, state) do
     common_handle({:handle_frame, frame}, parent, debug, state)
   end

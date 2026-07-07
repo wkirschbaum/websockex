@@ -366,6 +366,22 @@ defmodule WebSockexTest do
     assert_receive {1002, "Received an invalid frame"}
   end
 
+  test "closes with 1002 when a data frame arrives mid-fragment", context do
+    Process.unlink(context.pid)
+    WebSockex.cast(context.pid, {:send_conn, self()})
+    assert_receive conn = %WebSockex.Conn{}
+
+    # A fragment start (fin=0) followed by a complete text frame (fin=1) rather
+    # than a continuation is a protocol error (RFC 6455 §5.4).
+    fragment_start = <<0::1, 0::3, 1::4, 0::1, 2::7, "He"::utf8>>
+    data_frame = <<1::1, 0::3, 1::4, 0::1, 3::7, "llo"::utf8>>
+
+    send(context.pid, {conn.transport, conn.socket, fragment_start})
+    send(context.pid, {conn.transport, conn.socket, data_frame})
+
+    assert_receive {1002, "Endpoint sent a data frame while a fragment was unfinished"}
+  end
+
   test "can receive text fragments", context do
     WebSockex.cast(context.pid, {:send_conn, self()})
     TestClient.catch_attr(context.pid, :text, self())
